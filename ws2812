@@ -1,0 +1,199 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <Adafruit_NeoPixel.h>
+
+// 连接WS2812的引脚
+#define LED_PIN 4
+// LED数量
+#define NUM_LEDS 10
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel previewStrip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+const char* ssid = "Your_SSID";
+const char* password = "Your_PASSWORD";
+
+ESP8266WebServer server(80);
+
+// 全局变量用于存储设置
+int currentMode = 0;  // 0表示静态颜色，1表示颜色循环，2表示正转，3表示反转
+int redValue = 255;
+int greenValue = 0;
+int blueValue = 0;
+int delayValue = 500;
+
+// 新增变量用于标记是否处于预览模式
+boolean previewMode = false;  
+
+// 函数声明
+void handleRoot();
+void handleSettings();
+void setLEDMode(int mode);
+void previewLEDs();
+void updateLEDs();
+void handleApply();
+
+void setup() {
+    Serial.begin(115200);
+    WiFi.begin(ssid, password);
+    while (WiFi.status()!= WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    strip.begin();
+    strip.show();
+    previewStrip.begin();
+
+    server.on("/", handleRoot);
+    server.on("/settings", handleSettings);
+    server.on("/apply", handleApply);
+    server.begin();
+}
+
+void loop() {
+    server.handleClient();
+    if (previewMode) {
+        previewLEDs();
+    } else {
+        updateLEDs();
+    }
+}
+
+void handleRoot() {
+    String html = "<html><body>";
+    html += "<h1>WS2812 Control</h1>";
+    html += "<p><a href='/settings'>Settings</a></p>";
+    html += "</body></html>";
+    server.send(200, "text/html", html);
+}
+
+void handleSettings() {
+    if (server.method() == HTTP_POST) {
+        currentMode = server.arg("mode").toInt();
+        redValue = server.arg("red").toInt();
+        greenValue = server.arg("green").toInt();
+        blueValue = server.arg("blue").toInt();
+        delayValue = server.arg("delay").toInt();
+    }
+    String html = "<html><body>";
+    html += "<h1>Settings</h1>";
+    html += "<form method='post'>";
+    html += "Mode: <select name='mode'>";
+    html += "<option value='0' " + (currentMode == 0? "selected" : "") + ">Static Color</option>";
+    html += "<option value='1' " + (currentMode == 1? "selected" : "") + ">Color Cycle</option>";
+    html += "<option value='2' " + (currentMode == 2? "selected" : "") + ">Forward</option>";
+    html += "<option value='3' " + (currentMode == 3? "selected" : "") + ">Reverse</option>";
+    html += "</select><br>";
+    html += "Red: <input type='number' name='red' value='" + String(redValue) + "' min='0' max='255'><br>";
+    html += "Green: <input type='number' name='green' value='" + String(greenValue) + "' min='0' max='255'><br>";
+    html += "Blue: <input type='number' name='blue' value='" + String(blueValue) + "' min='0' max='255'><br>";
+    html += "Delay (ms): <input type='number' name='delay' value='" + String(delayValue) + "' min='100'><br>";
+    html += "<input type='submit' value='Preview'>";
+    html += "<input type='submit' value='Apply' formaction='/apply'>";
+    html += "</form></body></html>";
+    server.send(200, "text/html", html);
+}
+
+void setLEDMode(int mode) {
+    currentMode = mode;
+    if (currentMode == 0) {
+        // 静态颜色
+        for (int i = 0; i < NUM_LEDS; i++) {
+            strip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    } else if (currentMode == 1) {
+        // 颜色循环
+        for (int i = 0; i < NUM_LEDS; i++) {
+            int r = (i * (255 / NUM_LEDS));
+            int g = (255 - (i * (255 / NUM_LEDS)));
+            int b = 0;
+            strip.setPixelColor(i, r, g, b);
+        }
+    } else if (currentMode == 2) {
+        // 正转
+        for (int i = 0; i < NUM_LEDS; i++) {
+            strip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    } else if (currentMode == 3) {
+        // 反转
+        for (int i = NUM_LEDS - 1; i >= 0; i--) {
+            strip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    }
+    strip.show();
+}
+
+void previewLEDs() {
+    previewStrip.begin();
+    if (currentMode == 0) {
+        // 静态颜色
+        for (int i = 0; i < NUM_LEDS; i++) {
+            previewStrip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    } else if (currentMode == 1) {
+        // 颜色循环
+        for (int i = 0; i < NUM_LEDS; i++) {
+            int r = (i * (255 / NUM_LEDS));
+            int g = (255 - (i * (255 / NUM_LEDS)));
+            int b = 0;
+            previewStrip.setPixelColor(i, r, g, b);
+        }
+    } else if (currentMode == 2) {
+        // 正转
+        for (int i = 0; i < NUM_LEDS; i++) {
+            previewStrip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    } else if (currentMode == 3) {
+        // 反转
+        for (int i = NUM_LEDS - 1; i >= 0; i--) {
+            previewStrip.setPixelColor(i, redValue, greenValue, blueValue);
+        }
+    }
+    previewStrip.show();
+}
+
+void updateLEDs() {
+    static unsigned long lastUpdate = 0;
+    if (millis() - lastUpdate > delayValue) {
+        lastUpdate = millis();
+        if (currentMode == 1) {
+            // 颜色循环时的更新
+            int temp = strip.getPixelColor(0);
+            for (int i = 0; i < NUM_LEDS - 1; i++) {
+                strip.setPixelColor(i, strip.getPixelColor(i + 1));
+            }
+            strip.setPixelColor(NUM_LEDS - 1, temp);
+            strip.show();
+        } else if (currentMode == 2) {
+            // 正转更新
+            int temp = strip.getPixelColor(NUM_LEDS - 1);
+            for (int i = NUM_LEDS - 1; i > 0; i--) {
+                strip.setPixelColor(i, strip.getPixelColor(i - 1));
+            }
+            strip.setPixelColor(0, temp);
+            strip.show();
+        } else if (currentMode == 3) {
+            // 反转更新
+            int temp = strip.getPixelColor(0);
+            for (int i = 0; i < NUM_LEDS - 1; i++) {
+                strip.setPixelColor(i, strip.getPixelColor(i + 1));
+            }
+            strip.setPixelColor(NUM_LEDS - 1, temp);
+            strip.show();
+        }
+    }
+}
+
+void handleApply() {
+    previewMode = false;
+    setLEDMode(currentMode);
+    String html = "<html><body>";
+    html += "<h1>Settings Applied</h1>";
+    html += "<p><a href='/settings'>Go back to settings</a></p>";
+    html += "</body></html>";
+    server.send(200, "text/html", html);
+}
